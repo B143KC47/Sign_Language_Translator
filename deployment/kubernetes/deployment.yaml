@@ -1,0 +1,195 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sign-language-translator
+  namespace: production
+  labels:
+    app: sign-language-translator
+    version: v1.0.0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sign-language-translator
+  template:
+    metadata:
+      labels:
+        app: sign-language-translator
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: api
+        image: sign-language-translator:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: jwt-secret
+        - name: REDIS_HOST
+          value: redis-service
+        - name: DB_HOST
+          value: postgres-service
+        - name: MODEL_CACHE_DIR
+          value: /app/models
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/models
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: model-cache-pvc
+      - name: config
+        configMap:
+          name: app-config
+      nodeSelector:
+        accelerator: nvidia-tesla-t4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sign-language-translator-service
+  namespace: production
+spec:
+  selector:
+    app: sign-language-translator
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: LoadBalancer
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sign-language-translator-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sign-language-translator
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache-pvc
+  namespace: production
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: production
+data:
+  production_config.yaml: |
+    app:
+      name: "SignLanguageTranslator"
+      version: "1.0.0"
+      environment: "production"
+      debug: false
+    
+    languages:
+      sign_languages:
+        - code: "ASL"
+          name: "American Sign Language"
+          model_path: "models/asl_v1.0.h5"
+          vocabulary_size: 1000
+          regions: ["US", "CA"]
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-secrets
+  namespace: production
+type: Opaque
+data:
+  jwt-secret: <base64-encoded-secret>
+  db-password: <base64-encoded-password>
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sign-language-translator-ingress
+  namespace: production
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/websocket-services: sign-language-translator-service
+spec:
+  tls:
+  - hosts:
+    - api.signlanguage.example.com
+    secretName: sign-language-tls
+  rules:
+  - host: api.signlanguage.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sign-language-translator-service
+            port:
+              number: 80

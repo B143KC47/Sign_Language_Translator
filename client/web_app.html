@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language Translator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 40px 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin-bottom: 40px;
+            border-radius: 20px;
+        }
+        
+        h1 {
+            font-size: 3em;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .video-section, .translation-section {
+            background: #1a1a1a;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        
+        #videoElement {
+            width: 100%;
+            height: 400px;
+            background: #000;
+            border-radius: 15px;
+            object-fit: cover;
+        }
+        
+        #canvasElement {
+            display: none;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        select {
+            background: #2a2a2a;
+            color: white;
+            border: 1px solid #444;
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+        
+        .translation-output {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 15px;
+            min-height: 200px;
+            margin-top: 20px;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #2a2a2a;
+            border-radius: 10px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4444;
+        }
+        
+        .status-indicator.connected {
+            background: #44ff44;
+        }
+        
+        .gesture-display {
+            font-size: 48px;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            color: #667eea;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .metric-card {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .metric-label {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+        
+        .settings-panel {
+            background: #1a1a1a;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sign Language Translator</h1>
+            <p class="subtitle">Real-time translation across multiple sign languages</p>
+        </header>
+        
+        <div class="status">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <span id="statusText">Disconnected</span>
+        </div>
+        
+        <div class="settings-panel">
+            <h2>Settings</h2>
+            <div class="setting-row">
+                <label>Source Sign Language:</label>
+                <select id="sourceLanguage">
+                    <option value="ASL">American Sign Language (ASL)</option>
+                    <option value="BSL">British Sign Language (BSL)</option>
+                    <option value="JSL">Japanese Sign Language (JSL)</option>
+                    <option value="CSL">Chinese Sign Language (CSL)</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <label>Target Language:</label>
+                <select id="targetLanguage">
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="ja">Japanese</option>
+                    <option value="zh">Chinese</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="video-section">
+                <h2>Camera Feed</h2>
+                <video id="videoElement" autoplay></video>
+                <canvas id="canvasElement"></canvas>
+                <div class="controls">
+                    <button id="startBtn">Start Translation</button>
+                    <button id="stopBtn" disabled>Stop Translation</button>
+                    <button id="captureBtn">Capture Image</button>
+                </div>
+                <div class="gesture-display" id="currentGesture">-</div>
+            </div>
+            
+            <div class="translation-section">
+                <h2>Translation</h2>
+                <div class="translation-output" id="translationOutput">
+                    Translation will appear here...
+                </div>
+                <div class="controls">
+                    <button id="clearBtn">Clear</button>
+                    <button id="speakBtn">Speak</button>
+                    <button id="copyBtn">Copy Text</button>
+                </div>
+                <div class="metrics">
+                    <div class="metric-card">
+                        <div class="metric-value" id="confidenceValue">0%</div>
+                        <div class="metric-label">Confidence</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="wordsValue">0</div>
+                        <div class="metric-label">Words</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="fpsValue">0</div>
+                        <div class="metric-label">FPS</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:8080';
+        const WS_URL = 'ws://localhost:8080';
+        
+        let ws = null;
+        let stream = null;
+        let isTranslating = false;
+        let lastFrameTime = Date.now();
+        let frameCount = 0;
+        
+        const elements = {
+            video: document.getElementById('videoElement'),
+            canvas: document.getElementById('canvasElement'),
+            startBtn: document.getElementById('startBtn'),
+            stopBtn: document.getElementById('stopBtn'),
+            captureBtn: document.getElementById('captureBtn'),
+            clearBtn: document.getElementById('clearBtn'),
+            speakBtn: document.getElementById('speakBtn'),
+            copyBtn: document.getElementById('copyBtn'),
+            statusIndicator: document.getElementById('statusIndicator'),
+            statusText: document.getElementById('statusText'),
+            sourceLanguage: document.getElementById('sourceLanguage'),
+            targetLanguage: document.getElementById('targetLanguage'),
+            currentGesture: document.getElementById('currentGesture'),
+            translationOutput: document.getElementById('translationOutput'),
+            confidenceValue: document.getElementById('confidenceValue'),
+            wordsValue: document.getElementById('wordsValue'),
+            fpsValue: document.getElementById('fpsValue')
+        };
+        
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: 640, 
+                        height: 480,
+                        facingMode: 'user'
+                    } 
+                });
+                elements.video.srcObject = stream;
+                elements.canvas.width = 640;
+                elements.canvas.height = 480;
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Unable to access camera. Please check permissions.');
+            }
+        }
+        
+        function connectWebSocket() {
+            const clientId = Math.random().toString(36).substring(7);
+            const sourceLang = elements.sourceLanguage.value;
+            const targetLang = elements.targetLanguage.value;
+            
+            ws = new WebSocket(`${WS_URL}/ws/translate/${clientId}?source_language=${sourceLang}&target_language=${targetLang}`);
+            
+            ws.onopen = () => {
+                elements.statusIndicator.classList.add('connected');
+                elements.statusText.textContent = 'Connected';
+                console.log('WebSocket connected');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'prediction') {
+                    elements.currentGesture.textContent = data.data.class || '-';
+                    const confidence = (data.data.confidence * 100).toFixed(1);
+                    elements.confidenceValue.textContent = `${confidence}%`;
+                } else if (data.type === 'translation') {
+                    elements.translationOutput.textContent = data.data.final_translation;
+                    const words = data.data.final_translation.split(' ').length;
+                    elements.wordsValue.textContent = words;
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                elements.statusIndicator.classList.remove('connected');
+                elements.statusText.textContent = 'Disconnected';
+                if (isTranslating) {
+                    stopTranslation();
+                }
+            };
+        }
+        
+        function captureAndSend() {
+            if (!isTranslating || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            const ctx = elements.canvas.getContext('2d');
+            ctx.drawImage(elements.video, 0, 0, 640, 480);
+            
+            elements.canvas.toBlob((blob) => {
+                if (blob && ws.readyState === WebSocket.OPEN) {
+                    ws.send(blob);
+                }
+            }, 'image/jpeg', 0.8);
+            
+            frameCount++;
+            const now = Date.now();
+            if (now - lastFrameTime >= 1000) {
+                elements.fpsValue.textContent = frameCount;
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+            
+            requestAnimationFrame(captureAndSend);
+        }
+        
+        function startTranslation() {
+            if (isTranslating) return;
+            
+            isTranslating = true;
+            connectWebSocket();
+            elements.startBtn.disabled = true;
+            elements.stopBtn.disabled = false;
+            
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    captureAndSend();
+                }
+            }, 1000);
+        }
+        
+        function stopTranslation() {
+            isTranslating = false;
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            elements.startBtn.disabled = false;
+            elements.stopBtn.disabled = true;
+        }
+        
+        async function captureImage() {
+            const ctx = elements.canvas.getContext('2d');
+            ctx.drawImage(elements.video, 0, 0, 640, 480);
+            
+            elements.canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append('file', blob, 'capture.jpg');
+                
+                try {
+                    const response = await fetch(`${API_URL}/translate/image?source_language=${elements.sourceLanguage.value}&target_language=${elements.targetLanguage.value}`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer YOUR_JWT_TOKEN'
+                        },
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    if (result.translation) {
+                        elements.translationOutput.textContent = result.translation.final_translation;
+                    }
+                } catch (error) {
+                    console.error('Error translating image:', error);
+                }
+            }, 'image/jpeg');
+        }
+        
+        function clearTranslation() {
+            elements.translationOutput.textContent = 'Translation will appear here...';
+            elements.currentGesture.textContent = '-';
+            elements.confidenceValue.textContent = '0%';
+            elements.wordsValue.textContent = '0';
+        }
+        
+        async function speakTranslation() {
+            const text = elements.translationOutput.textContent;
+            if (!text || text === 'Translation will appear here...') return;
+            
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = elements.targetLanguage.value;
+                speechSynthesis.speak(utterance);
+            } else {
+                try {
+                    const response = await fetch(`${API_URL}/tts`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer YOUR_JWT_TOKEN',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            text: text,
+                            language: elements.targetLanguage.value
+                        })
+                    });
+                    
+                    const audioBlob = await response.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                } catch (error) {
+                    console.error('Error with text-to-speech:', error);
+                }
+            }
+        }
+        
+        function copyTranslation() {
+            const text = elements.translationOutput.textContent;
+            if (!text || text === 'Translation will appear here...') return;
+            
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = elements.copyBtn.textContent;
+                elements.copyBtn.textContent = 'Copied!';
+                setTimeout(() => {
+                    elements.copyBtn.textContent = originalText;
+                }, 2000);
+            });
+        }
+        
+        elements.startBtn.addEventListener('click', startTranslation);
+        elements.stopBtn.addEventListener('click', stopTranslation);
+        elements.captureBtn.addEventListener('click', captureImage);
+        elements.clearBtn.addEventListener('click', clearTranslation);
+        elements.speakBtn.addEventListener('click', speakTranslation);
+        elements.copyBtn.addEventListener('click', copyTranslation);
+        
+        elements.sourceLanguage.addEventListener('change', () => {
+            if (isTranslating) {
+                stopTranslation();
+                setTimeout(startTranslation, 500);
+            }
+        });
+        
+        elements.targetLanguage.addEventListener('change', () => {
+            if (isTranslating) {
+                stopTranslation();
+                setTimeout(startTranslation, 500);
+            }
+        });
+        
+        initCamera();
+    </script>
+</body>
+</html>
