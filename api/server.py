@@ -19,7 +19,7 @@ from core.models import MultiLanguageSignModel
 from core.translation_service import MultiLanguageTranslator, TextToSpeech
 from core.data_pipeline import DataCollector, ActiveLearning
 from core.monitoring import ProductionMonitor
-from hand_detector_v2 import ImprovedHandDetector
+from model.detectors.hand_detector_v2 import ImprovedHandDetector
 
 
 security = HTTPBearer()
